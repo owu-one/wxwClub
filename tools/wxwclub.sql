@@ -112,7 +112,7 @@ CREATE TABLE `blacklist` (
   KEY `inuse` (`inuse`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---- Migration: 20241024
+-- Migration: 20241024
 
 CREATE TABLE `users_blocks` (
   `id` int NOT NULL AUTO_INCREMENT,
