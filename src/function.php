@@ -174,6 +174,12 @@ function Club_Push_Activity($club, $activity, $inbox = false) {
 function Club_Announce_Process($jsonld) {
     global $db, $base, $public_streams;
     $pdo = $db->prepare('select `id` from `activities` where `object` = :object');
+    if (isBlocked($jsonld['actor'], $clubs)) {
+        if ($config['nodeDebugging']) {
+            file_put_contents(APP_ROOT.'/logs/blocklist/'.date('Y-m-d_H:i:s').'_blocked.json', Club_Json_Encode($jsonld));
+        }
+        return;
+    }
     $pdo->execute([':object' => $jsonld['object']['id']]);
     if (!$pdo->fetch(PDO::FETCH_ASSOC)) {
         foreach ($to = array_merge(to_array($jsonld['to']), to_array($jsonld['cc'])) as $cc)
@@ -316,4 +322,151 @@ function Club_Json_Output($data, $format = 0, $status = 200) {
 
 function to_array($data) {
     return is_array($data) ? $data : [$data];
+}
+
+function block($type, $target, $club = null) {
+    global $db;
+    $table = ($type == 'user') ? 'users_blocks' : 'instances_blocklist';
+    $club_id = null;
+    if ($club) {
+        $pdo = $db->prepare('SELECT cid FROM clubs WHERE name = :name');
+        $pdo->execute([':name' => $club]);
+        $club_id = $pdo->fetchColumn();
+        if (!$club_id) {
+            echo "Error: Club $club not found.\n";
+            return;
+        }
+    }
+    $pdo = $db->prepare("INSERT INTO $table (club_id, target, created_at) VALUES (:club_id, :target, :created_at)");
+    $pdo->execute([':club_id' => $club_id, ':target' => $target, ':created_at' => time()]);
+    echo "Blocked $type: $target" . ($club ? " for club: $club" : "") . "\n";
+}
+
+function unblock($type, $target, $club = null) {
+    global $db;
+    $table = ($type == 'user') ? 'users_blocks' : 'instances_blocklist';
+    $club_id = null;
+    if ($club) {
+        $pdo = $db->prepare('SELECT cid FROM clubs WHERE name = :name');
+        $pdo->execute([':name' => $club]);
+        $club_id = $pdo->fetchColumn();
+        if (!$club_id) {
+            echo "Error: Club $club not found.\n";
+            return;
+        }
+    }
+    $pdo = $db->prepare("DELETE FROM $table WHERE target = :target AND club_id " . ($club_id ? "= :club_id" : "IS NULL"));
+    $params = [':target' => $target];
+    if ($club_id) {
+        $params[':club_id'] = $club_id;
+    }
+    $pdo->execute($params);
+    echo "Unblocked $type: $target" . ($club ? " for club: $club" : "") . "\n";
+}
+
+function listBlocks($club = null) {
+    global $db;
+    $club_id = null;
+    if ($club) {
+        $pdo = $db->prepare('SELECT cid FROM clubs WHERE name = :name');
+        $pdo->execute([':name' => $club]);
+        $club_id = $pdo->fetchColumn();
+        if (!$club_id) {
+            echo "Error: Club $club not found.\n";
+            return;
+        }
+    }
+    
+    $tables = ['users_blocks', 'instances_blocklist'];
+    foreach ($tables as $table) {
+        $type = ($table == 'users_blocks') ? 'User' : 'Instance';
+        echo "$type blocks:\n";
+        $pdo = $db->prepare("SELECT target FROM $table WHERE club_id " . ($club_id ? "= :club_id" : "IS NULL"));
+        if ($club_id) {
+            $pdo->execute([':club_id' => $club_id]);
+        } else {
+            $pdo->execute();
+        }
+        while ($row = $pdo->fetch(PDO::FETCH_ASSOC)) {
+            echo "- " . $row['target'] . "\n";
+        }
+        echo "\n";
+    }
+}
+
+function exportBlocks($club = null) {
+    global $db;
+    $club_id = null;
+    if ($club) {
+        $pdo = $db->prepare('SELECT cid FROM clubs WHERE name = :name');
+        $pdo->execute([':name' => $club]);
+        $club_id = $pdo->fetchColumn();
+        if (!$club_id) {
+            echo "Error: Club $club not found.\n";
+            return;
+        }
+    }
+    
+    $users_file = fopen('users_blocks.txt', 'w');
+    $instances_file = fopen('instances_blocks.txt', 'w');
+    
+    $tables = ['users_blocks', 'instances_blocklist'];
+    foreach ($tables as $table) {
+        $file = ($table == 'users_blocks') ? $users_file : $instances_file;
+        $pdo = $db->prepare("SELECT target FROM $table WHERE club_id " . ($club_id ? "= :club_id" : "IS NULL"));
+        if ($club_id) {
+            $pdo->execute([':club_id' => $club_id]);
+        } else {
+            $pdo->execute();
+        }
+        while ($row = $pdo->fetch(PDO::FETCH_ASSOC)) {
+            fwrite($file, $row['target'] . "\n");
+        }
+    }
+    
+    fclose($users_file);
+    fclose($instances_file);
+    echo "Blocks exported to users_blocks.txt and instances_blocks.txt\n";
+}
+
+function isBlocked($actor, $clubs) {
+    global $db;
+    $actor_parts = parse_url($actor);
+    $instance = $actor_parts['host'];
+    $username = explode('/', $actor_parts['path'])[1];
+    $full_username = "$username@$instance";
+
+    $pdo = $db->prepare('SELECT 1 FROM instances_blocklist WHERE target = :target OR :instance LIKE CONCAT(target, "%") LIMIT 1');
+    $pdo->execute([':target' => $instance, ':instance' => $instance]);
+    if ($pdo->fetchColumn()) {
+        return true;
+    }
+
+    $pdo = $db->prepare('SELECT 1 FROM users_blocks WHERE target = :target LIMIT 1');
+    $pdo->execute([':target' => $full_username]);
+    if ($pdo->fetchColumn()) {
+        return true;
+    }
+
+    foreach ($clubs as $club) {
+        $pdo = $db->prepare('SELECT cid FROM clubs WHERE name = :name');
+        $pdo->execute([':name' => $club]);
+        $club_id = $pdo->fetchColumn();
+
+        if ($club_id) {
+            $pdo = $db->prepare('SELECT 1 FROM instances_blocklist WHERE club_id = :club_id AND (target = :target OR :instance LIKE CONCAT(target, "%")) LIMIT 1');
+            $pdo->execute([':club_id' => $club_id, ':target' => $instance, ':instance' => $instance]);
+            if ($pdo->fetchColumn()) {
+                return true;
+            }
+
+            $pdo = $db->prepare('SELECT 1 FROM users_blocks WHERE club_id = :club_id AND target = :target LIMIT 1');
+            $pdo->execute([':club_id' => $club_id, ':target' => $full_username]);
+            if ($pdo->fetchColumn()) {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
