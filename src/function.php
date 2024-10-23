@@ -172,14 +172,8 @@ function Club_Push_Activity($club, $activity, $inbox = false) {
 }
 
 function Club_Announce_Process($jsonld) {
-    global $db, $base, $public_streams;
+    global $config, $db, $base, $public_streams;
     $pdo = $db->prepare('select `id` from `activities` where `object` = :object');
-    if (isBlocked($jsonld['actor'], $clubs)) {
-        if ($config['nodeDebugging']) {
-            file_put_contents(APP_ROOT.'/logs/blocklist/'.date('Y-m-d_H:i:s').'_blocked.json', Club_Json_Encode($jsonld));
-        }
-        return;
-    }
     $pdo->execute([':object' => $jsonld['object']['id']]);
     if (!$pdo->fetch(PDO::FETCH_ASSOC)) {
         foreach ($to = array_merge(to_array($jsonld['to']), to_array($jsonld['cc'])) as $cc)
@@ -187,6 +181,12 @@ function Club_Announce_Process($jsonld) {
                 if ($club = Club_Exist(explode('/', substr($cc, strlen($club_url)))[0])) $clubs[$club] = 1;
         if (!empty($clubs) && ($clubs = array_keys($clubs)) && in_array($public_streams, $to)) {
             if ($actor = Club_Get_Actor($clubs[0], $jsonld['actor'])) {
+                if (isBlocked($actor['name'], $clubs)) {
+                    if ($config['nodeDebugging'] == 1) {
+                        file_put_contents(APP_ROOT.'/logs/blocklist/'.date('Y-m-d_H:i:s').'_blocked.json', Club_Json_Encode($jsonld));
+                    }
+                    return;
+                }
                 $pdo = $db->prepare('insert into `activities`(`uid`,`type`,`clubs`,`object`,`timestamp`) values(:uid, :type, :clubs, :object, :timestamp)');
                 $pdo->execute([':uid' => $actor['uid'], ':type' => 'Create', ':clubs' => Club_Json_Encode($clubs), 'object' => $jsonld['object']['id'], 'timestamp' => ($time = time())]);
                 $pdo = $db->query('select last_insert_id()');
@@ -429,21 +429,18 @@ function exportBlocks($club = null) {
     echo "Blocks exported to users_blocks.txt and instances_blocks.txt\n";
 }
 
-function isBlocked($actor, $clubs) {
+function isBlocked($name, $clubs) {
     global $db;
-    $actor_parts = parse_url($actor);
-    $instance = $actor_parts['host'];
-    $username = explode('/', $actor_parts['path'])[1];
-    $full_username = "$username@$instance";
+    $instance = explode('@', $name)[1];
 
-    $pdo = $db->prepare('SELECT 1 FROM instances_blocks WHERE target = :target OR :instance LIKE CONCAT(target, "%") LIMIT 1');
+    $pdo = $db->prepare('SELECT 1 FROM instances_blocks WHERE club_id IS NULL AND (target = :target OR :instance LIKE CONCAT("%.", target)) LIMIT 1');
     $pdo->execute([':target' => $instance, ':instance' => $instance]);
     if ($pdo->fetchColumn()) {
         return true;
     }
 
-    $pdo = $db->prepare('SELECT 1 FROM users_blocks WHERE target = :target LIMIT 1');
-    $pdo->execute([':target' => $full_username]);
+    $pdo = $db->prepare('SELECT 1 FROM users_blocks WHERE club_id IS NULL AND target = :target LIMIT 1');
+    $pdo->execute([':target' => $name]);
     if ($pdo->fetchColumn()) {
         return true;
     }
@@ -454,14 +451,14 @@ function isBlocked($actor, $clubs) {
         $club_id = $pdo->fetchColumn();
 
         if ($club_id) {
-            $pdo = $db->prepare('SELECT 1 FROM instances_blocks WHERE club_id = :club_id AND (target = :target OR :instance LIKE CONCAT(target, "%")) LIMIT 1');
+            $pdo = $db->prepare('SELECT 1 FROM instances_blocks WHERE club_id = :club_id AND (target = :target OR :instance LIKE CONCAT("%.", target)) LIMIT 1');
             $pdo->execute([':club_id' => $club_id, ':target' => $instance, ':instance' => $instance]);
             if ($pdo->fetchColumn()) {
                 return true;
             }
 
             $pdo = $db->prepare('SELECT 1 FROM users_blocks WHERE club_id = :club_id AND target = :target LIMIT 1');
-            $pdo->execute([':club_id' => $club_id, ':target' => $full_username]);
+            $pdo->execute([':club_id' => $club_id, ':target' => $name]);
             if ($pdo->fetchColumn()) {
                 return true;
             }
