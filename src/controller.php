@@ -24,7 +24,16 @@ function controller() {
                 if (isset($uri[3])) switch ($uri[3]) {
                     case 'inbox':
                         if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-                            $jsonld = json_decode($input = file_get_contents('php://input'), 1);
+                            $input = file_get_contents('php://input');
+                            if ($input === false) {
+                                Club_Json_Output(['message' => 'Failed to read input'], 0, 400);
+                                break;
+                            }
+                            $jsonld = json_decode($input, true);
+                            if (json_last_error() !== JSON_ERROR_NONE) {
+                                Club_Json_Output(['message' => 'Invalid JSON input'], 0, 400);
+                                break;
+                            }
                             if (isset($jsonld['actor']) && parse_url($jsonld['actor'])['host'] != $config['base']) {
                                 
                                 if ($jsonld['type'] == 'Delete' && $jsonld['actor'] == $jsonld['object']) {
@@ -241,7 +250,16 @@ function controller() {
         
         case 'inbox':
             if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-                $jsonld = json_decode($input = file_get_contents('php://input'), 1);
+                $input = file_get_contents('php://input');
+                if ($input === false || $input === '') {
+                    Club_Json_Output(['message' => 'Failed to read input or input is empty'], 0, 400);
+                    break;
+                }
+                $jsonld = json_decode($input, true);
+                if (json_last_error() !== JSON_ERROR_NONE) {
+                    Club_Json_Output(['message' => 'Invalid JSON input'], 0, 400);
+                    break;
+                }
                 if (isset($jsonld['actor']) && parse_url($jsonld['actor'])['host'] != $config['base']) {
                     
                     if ($jsonld['type'] == 'Delete' && $jsonld['actor'] == $jsonld['object']) {
