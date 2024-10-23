@@ -407,8 +407,9 @@ function exportBlocks($club = null) {
         }
     }
     
-    $users_file = fopen('users_blocks.txt', 'w');
-    $instances_file = fopen('instances_blocks.txt', 'w');
+    $prefix = $club ? $club . '_' : '';
+    $users_file = fopen($prefix . 'users_blocks.txt', 'w');
+    $instances_file = fopen($prefix . 'instances_blocks.txt', 'w');
     
     $tables = ['users_blocks', 'instances_blocks'];
     foreach ($tables as $table) {
@@ -426,7 +427,43 @@ function exportBlocks($club = null) {
     
     fclose($users_file);
     fclose($instances_file);
-    echo "Blocks exported to users_blocks.txt and instances_blocks.txt\n";
+    echo "Blocks exported to " . $prefix . "users_blocks.txt and " . $prefix . "instances_blocks.txt\n";
+}
+
+function importBlocks($type, $file_path, $club = null) {
+    global $db;
+    $club_id = null;
+    if ($club) {
+        $pdo = $db->prepare('SELECT cid FROM clubs WHERE name = :name');
+        $pdo->execute([':name' => $club]);
+        $club_id = $pdo->fetchColumn();
+        if (!$club_id) {
+            echo "Error: Club $club not found.\n";
+            return;
+        }
+    }
+    
+    if (!file_exists($file_path)) {
+        echo "Error: File $file_path not found.\n";
+        return;
+    }
+    
+    $db->beginTransaction();
+    
+    try {
+        $table = ($type === 'user') ? 'users_blocks' : 'instances_blocks';
+        $pdo = $db->prepare("INSERT IGNORE INTO $table (club_id, target, created_at) VALUES (:club_id, :target, :created_at)");
+        $targets = file($file_path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        foreach ($targets as $target) {
+            $pdo->execute([':club_id' => $club_id, ':target' => $target, ':created_at' => time()]);
+        }
+        
+        $db->commit();
+        echo "Successfully imported block rules.\n";
+    } catch (Exception $e) {
+        $db->rollBack();
+        echo "Error importing block rules: " . $e->getMessage() . "\n";
+    }
 }
 
 function isBlocked($name, $clubs) {

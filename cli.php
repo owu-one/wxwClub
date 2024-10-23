@@ -57,6 +57,20 @@ try {
             $club = isset($argv[2]) ? $argv[2] : null;
             exportBlocks($club);
             break;
+        case 'import-blocks':
+            if (isset($argv[2]) && isset($argv[3])) {
+                $type = $argv[2];
+                $file_path = $argv[3];
+                $club = isset($argv[4]) ? $argv[4] : null;
+                if ($type !== 'user' && $type !== 'instance') {
+                    echo "Error: Type must be 'user' or 'instance'.\n";
+                } else {
+                    importBlocks($type, $file_path, $club);
+                }
+            } else {
+                echo "Usage: php cli.php import-blocks <user|instance> <file_path> [<club>]\n";
+            }
+            break;
         default: echo 'Unknown parameters',"\n"; break;
     }
 } catch (PDOException $e) {
