@@ -326,7 +326,7 @@ function to_array($data) {
 
 function block($type, $target, $club = null) {
     global $db;
-    $table = ($type == 'user') ? 'users_blocks' : 'instances_blocklist';
+    $table = ($type == 'user') ? 'users_blocks' : 'instances_blocks';
     $club_id = null;
     if ($club) {
         $pdo = $db->prepare('SELECT cid FROM clubs WHERE name = :name');
@@ -344,7 +344,7 @@ function block($type, $target, $club = null) {
 
 function unblock($type, $target, $club = null) {
     global $db;
-    $table = ($type == 'user') ? 'users_blocks' : 'instances_blocklist';
+    $table = ($type == 'user') ? 'users_blocks' : 'instances_blocks';
     $club_id = null;
     if ($club) {
         $pdo = $db->prepare('SELECT cid FROM clubs WHERE name = :name');
@@ -377,7 +377,7 @@ function listBlocks($club = null) {
         }
     }
     
-    $tables = ['users_blocks', 'instances_blocklist'];
+    $tables = ['users_blocks', 'instances_blocks'];
     foreach ($tables as $table) {
         $type = ($table == 'users_blocks') ? 'User' : 'Instance';
         echo "$type blocks:\n";
@@ -410,7 +410,7 @@ function exportBlocks($club = null) {
     $users_file = fopen('users_blocks.txt', 'w');
     $instances_file = fopen('instances_blocks.txt', 'w');
     
-    $tables = ['users_blocks', 'instances_blocklist'];
+    $tables = ['users_blocks', 'instances_blocks'];
     foreach ($tables as $table) {
         $file = ($table == 'users_blocks') ? $users_file : $instances_file;
         $pdo = $db->prepare("SELECT target FROM $table WHERE club_id " . ($club_id ? "= :club_id" : "IS NULL"));
@@ -436,7 +436,7 @@ function isBlocked($actor, $clubs) {
     $username = explode('/', $actor_parts['path'])[1];
     $full_username = "$username@$instance";
 
-    $pdo = $db->prepare('SELECT 1 FROM instances_blocklist WHERE target = :target OR :instance LIKE CONCAT(target, "%") LIMIT 1');
+    $pdo = $db->prepare('SELECT 1 FROM instances_blocks WHERE target = :target OR :instance LIKE CONCAT(target, "%") LIMIT 1');
     $pdo->execute([':target' => $instance, ':instance' => $instance]);
     if ($pdo->fetchColumn()) {
         return true;
@@ -454,7 +454,7 @@ function isBlocked($actor, $clubs) {
         $club_id = $pdo->fetchColumn();
 
         if ($club_id) {
-            $pdo = $db->prepare('SELECT 1 FROM instances_blocklist WHERE club_id = :club_id AND (target = :target OR :instance LIKE CONCAT(target, "%")) LIMIT 1');
+            $pdo = $db->prepare('SELECT 1 FROM instances_blocks WHERE club_id = :club_id AND (target = :target OR :instance LIKE CONCAT(target, "%")) LIMIT 1');
             $pdo->execute([':club_id' => $club_id, ':target' => $instance, ':instance' => $instance]);
             if ($pdo->fetchColumn()) {
                 return true;

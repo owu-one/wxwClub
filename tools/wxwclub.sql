@@ -125,7 +125,7 @@ CREATE TABLE `users_blocks` (
   CONSTRAINT `users_blocks_ibfk_1` FOREIGN KEY (`club_id`) REFERENCES `clubs` (`cid`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
-CREATE TABLE `instances_blocklist` (
+CREATE TABLE `instances_blocks` (
   `id` int NOT NULL AUTO_INCREMENT,
   `club_id` int DEFAULT NULL,
   `target` varchar(255) CHARACTER SET ascii COLLATE ascii_general_ci NOT NULL,
@@ -133,5 +133,5 @@ CREATE TABLE `instances_blocklist` (
   PRIMARY KEY (`id`),
   KEY `club_id` (`club_id`),
   KEY `target` (`target`),
-  CONSTRAINT `instances_blocklist_ibfk_1` FOREIGN KEY (`club_id`) REFERENCES `clubs` (`cid`) ON DELETE CASCADE ON UPDATE CASCADE
+  CONSTRAINT `instances_blocks_ibfk_1` FOREIGN KEY (`club_id`) REFERENCES `clubs` (`cid`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
