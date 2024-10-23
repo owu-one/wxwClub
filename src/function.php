@@ -452,7 +452,9 @@ function importBlocks($type, $file_path, $club = null) {
     
     try {
         $table = ($type === 'user') ? 'users_blocks' : 'instances_blocks';
-        $pdo = $db->prepare("INSERT IGNORE INTO $table (club_id, target, created_at) VALUES (:club_id, :target, :created_at)");
+        $pdo = $db->prepare("INSERT INTO $table (club_id, target, created_at) 
+                             VALUES (:club_id, :target, :created_at) 
+                             ON DUPLICATE KEY UPDATE created_at = LEAST(created_at, VALUES(created_at))");
         $targets = file($file_path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
         foreach ($targets as $target) {
             $pdo->execute([':club_id' => $club_id, ':target' => $target, ':created_at' => time()]);
